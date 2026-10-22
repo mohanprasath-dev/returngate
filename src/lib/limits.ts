@@ -85,7 +85,7 @@ export async function checkAndIncrementVisionUsage({
 		}
 
 		return { allowed: true, currentCount: ipCounter.count, maxAllowed: hourlyCap };
-	} catch (dbErr: unknown) {
+	} catch {
 		// Fallback to in-memory counter if DB is unconfigured or in tests
 		const globalCount = (inMemoryCounters.get(dayKey) || 0) + 1;
 		inMemoryCounters.set(dayKey, globalCount);

@@ -30,3 +30,6 @@ Thumbs.db
 
 # local eval outputs
 eval/out/
+
+# typescript build cache
+*.tsbuildinfo

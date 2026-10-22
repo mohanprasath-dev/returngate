@@ -57,10 +57,11 @@ export async function setCachedVisionResult(
 	inMemoryVisionCache.set(sha256, result);
 
 	try {
+		const jsonValue = JSON.parse(JSON.stringify(result));
 		await prismaClient.visionCache.upsert({
 			where: { imageSha256: sha256 },
-			update: { resultJson: result as any },
-			create: { imageSha256: sha256, resultJson: result as any },
+			update: { resultJson: jsonValue },
+			create: { imageSha256: sha256, resultJson: jsonValue },
 		});
 	} catch {
 		// DB offline or test mode
