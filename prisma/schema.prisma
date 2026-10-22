@@ -1,0 +1,97 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Workspace {
+  id             String          @id @default(uuid())
+  createdAt      DateTime        @default(now())
+  expiresAt      DateTime
+  merchantPolicy MerchantPolicy?
+  orders         Order[]
+}
+
+model MerchantPolicy {
+  id                  String    @id @default(uuid())
+  workspaceId         String    @unique
+  workspace           Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  capCents            Int       @default(2500)
+  minorPercent        Int       @default(20)
+  salvageCents        Int       @default(0)
+  returnShippingCents Int       @default(600)
+  handlingCents       Int       @default(200)
+  minSavingsCents     Int       @default(300)
+  minConfidence       Float     @default(0.8)
+  enabled             Boolean   @default(true)
+  updatedAt           DateTime  @updatedAt
+}
+
+model Order {
+  id            String       @id @default(uuid())
+  workspaceId   String
+  workspace     Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  paypalOrderId String
+  captureId     String       @unique
+  amountCents   Int
+  currency      String       @default("USD")
+  status        String       @default("COMPLETED")
+  createdAt     DateTime     @default(now())
+  cases         ReturnCase[]
+}
+
+model ReturnCase {
+  id             String    @id @default(uuid())
+  orderId        String
+  order          Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  nonce          String
+  nonceExpiresAt DateTime
+  nonceUsedAt    DateTime?
+  status         String    @default("OPEN")
+  imageSha256    String?
+  visionJson     Json?
+  decision       String?
+  offerCents     Int?
+  decidedBy      String?
+  createdAt      DateTime  @default(now())
+  refunds        Refund[]
+}
+
+model Refund {
+  id             String     @id @default(uuid())
+  caseId         String
+  returnCase     ReturnCase @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  idempotencyKey String     @unique
+  paypalRefundId String?
+  amountCents    Int
+  status         String     @default("PENDING")
+  createdAt      DateTime   @default(now())
+  confirmedAt    DateTime?
+}
+
+model WebhookEvent {
+  id                String   @id @default(uuid())
+  eventId           String   @unique
+  type              String
+  signatureVerified Boolean  @default(false)
+  payload           Json
+  receivedAt        DateTime @default(now())
+}
+
+model VisionCache {
+  imageSha256 String   @id
+  resultJson  Json
+  createdAt   DateTime @default(now())
+}
+
+model UsageCounter {
+  id          String   @id @default(uuid())
+  key         String
+  windowStart DateTime
+  count       Int      @default(0)
+
+  @@unique([key, windowStart])
+}
