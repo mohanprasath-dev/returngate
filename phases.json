@@ -1,0 +1,213 @@
+{
+  "project": "ReturnGate",
+  "read_first": ["AGENT.md", "RULES.md", "PRD.md"],
+  "model_policy": {
+    "default": "gemini-flash",
+    "escalate_on_failure_loop": "claude-sonnet",
+    "opus_only_for": ["engine/offer", "webhook verification", "idempotency"]
+  },
+  "phases": [
+    {
+      "id": "P0",
+      "name": "Repo, env and sandbox spike (Gate 1)",
+      "gate": "Oct 24 18:00 IST",
+      "tasks": [
+        {
+          "id": "P0.1",
+          "title": "Scaffold repo",
+          "prompt": "Create a Next.js 15 App Router project with TypeScript strict, Tailwind and shadcn/ui, using pnpm. Add Vitest. Add the folder layout from AGENT.md as empty placeholders. Copy .env.example and .gitignore from the kit. Do not add any other dependency.",
+          "acceptance": "pnpm dev serves a blank page; pnpm test runs with zero tests; .env is ignored by git."
+        },
+        {
+          "id": "P0.2",
+          "title": "Env validation",
+          "prompt": "Add src/lib/env.ts that parses process.env with Zod and throws a clear error naming any missing variable. Use the variables listed in .env.example. Never log values.",
+          "acceptance": "Starting the app with a missing PAYPAL_CLIENT_ID fails with a message naming it."
+        },
+        {
+          "id": "P0.3",
+          "title": "PayPal spike script",
+          "model": "claude-sonnet",
+          "prompt": "Write scripts/spike.ts. Steps: get an OAuth token; create an order (intent CAPTURE, one item, USD); print the approve link and wait for me to approve as the sandbox buyer, then press Enter; capture the order; issue a partial refund of 1.00 USD with a fixed PayPal-Request-Id; repeat the same refund call and print that PayPal returned the same refund without a second one. Print every response status and id. Use fetch only. Mark anything unproven as [VERIFY IN SANDBOX].",
+          "acceptance": "I run pnpm spike with US sandbox accounts and see capture id, refund id, and an identical refund on replay."
+        },
+        {
+          "id": "P0.4",
+          "title": "Webhook receiver and signature check",
+          "model": "claude-opus",
+          "prompt": "Create src/app/api/webhooks/paypal/route.ts on the Node runtime. Read the raw body with request.text(). Verify using POST /v1/notifications/verify-webhook-signature with PAYPAL-TRANSMISSION-ID, PAYPAL-TRANSMISSION-TIME, PAYPAL-CERT-URL, PAYPAL-AUTH-ALGO, PAYPAL-TRANSMISSION-SIG, PAYPAL_WEBHOOK_ID and the parsed raw body. Reject with 400 if verification is not SUCCESS. Log event id and type only. Do not touch the DB yet.",
+          "acceptance": "A real PAYMENT.CAPTURE.REFUNDED event from the spike appears in logs with verification SUCCESS. Simulator events are rejected."
+        },
+        {
+          "id": "P0.5",
+          "title": "Deploy to Render",
+          "prompt": "Add a render.yaml and a README section for deploying the Next.js app as a Render web service with env vars set in the dashboard. Do not commit secrets.",
+          "acceptance": "Public Render URL receives the real webhook from the sandbox app."
+        }
+      ]
+    },
+    {
+      "id": "P1",
+      "name": "Data layer and PayPal client",
+      "tasks": [
+        {
+          "id": "P1.1",
+          "title": "Prisma schema",
+          "prompt": "Create prisma/schema.prisma for the models in PRD section 6 on Neon Postgres. Add UNIQUE constraints on WebhookEvent.eventId and Refund.idempotencyKey. Add the first migration.",
+          "acceptance": "prisma migrate dev succeeds; inserting a duplicate eventId fails."
+        },
+        {
+          "id": "P1.2",
+          "title": "Typed PayPal client",
+          "model": "claude-sonnet",
+          "prompt": "Create src/lib/paypal/client.ts, orders.ts, refunds.ts with typed fetch wrappers and Zod-parsed responses. Cache the OAuth token until shortly before expiry. Every mutating call takes an idempotency key and sends it as PayPal-Request-Id. Map PayPal errors to a typed error with name, debug_id and status. Support an optional PayPal-Mock-Response header for negative tests.",
+          "acceptance": "Unit tests with a mocked fetch cover success, 422 REFUND_AMOUNT_EXCEEDED style errors, and token refresh."
+        },
+        {
+          "id": "P1.3",
+          "title": "Webhook persistence and dedupe",
+          "model": "claude-opus",
+          "prompt": "After signature verification, insert the event into WebhookEvent. On unique violation, return 200 and do nothing else. On PAYMENT.CAPTURE.REFUNDED, update the matching Refund row to confirmed. Also add a GET-poll helper that reads the refund state from PayPal so the UI never depends on webhook timing.",
+          "acceptance": "Posting the same real event twice results in one row and one state transition."
+        }
+      ]
+    },
+    {
+      "id": "P2",
+      "name": "Deterministic engine",
+      "tasks": [
+        {
+          "id": "P2.1",
+          "title": "Offer engine",
+          "model": "claude-opus",
+          "prompt": "Implement src/lib/engine/offer.ts exactly as PRD section 5: guards, AUTO_OFFER / MANUAL_REVIEW / FULL_RETURN_ONLY decision, and the offer amount in integer cents. Pure function, no I/O. Write Vitest tests including property-style tests proving offerCents never exceeds capCents or remainingRefundableCents for random inputs, and that any failed guard never yields AUTO_OFFER.",
+          "acceptance": "All tests pass. A test named 'vision cannot change the amount' passes."
+        },
+        {
+          "id": "P2.2",
+          "title": "Nonce service",
+          "prompt": "Implement src/lib/engine/nonce.ts: generate a 6 digit single-use nonce per case, 10 minute expiry, bound to the case id, marked used on consumption. Tests for expiry, reuse and wrong-case use.",
+          "acceptance": "Expired, reused and cross-case nonces are rejected."
+        },
+        {
+          "id": "P2.3",
+          "title": "Refund executor",
+          "model": "claude-opus",
+          "prompt": "Implement the function that, given an approved case, computes the idempotency key (UUIDv5 from caseId + action + revision), re-checks remaining refundable from PayPal, clamps to engine rules, calls the partial refund, and stores the Refund row before and after the call. A retry after a timeout must return the same refund.",
+          "acceptance": "Test with a mocked PayPal that drops the first response: second attempt yields exactly one refund."
+        }
+      ]
+    },
+    {
+      "id": "P3",
+      "name": "Vision pipeline (Gate 2 part 1)",
+      "gate": "Oct 29 18:00 IST",
+      "tasks": [
+        {
+          "id": "P3.1",
+          "title": "Vision schema and guards",
+          "prompt": "Create src/lib/vision/schema.ts with the strict Zod schema from PRD section 7 (reject extra fields) and guards.ts that strips imperative text from notes and enforces length. Notes are display-only and never parsed into logic.",
+          "acceptance": "Output containing an amount field or extra keys is rejected."
+        },
+        {
+          "id": "P3.2",
+          "title": "Gemini call with cache and caps",
+          "prompt": "Create src/lib/vision/gemini.ts calling the model in GEMINI_MODEL with structured JSON output and a system prompt that treats image text as untrusted. Add SHA-256 caching in VisionCache and per-IP hourly and global daily caps from src/lib/limits.ts. When capped or on any error, return a result that forces MANUAL_REVIEW.",
+          "acceptance": "Same image twice causes one model call. Hitting the cap causes MANUAL_REVIEW, never an offer."
+        },
+        {
+          "id": "P3.3",
+          "title": "Adversarial eval harness",
+          "prompt": "Create eval/expected.json and a pnpm eval:vision script that runs every image in eval/ through the pipeline plus the offer engine and prints a pass/fail table. Required cases: stock photo, photo of a screen, wrong item, ambiguous scratch, missing nonce, injected text, blurry image, major damage, and 2 clean minor-scratch cases. I will supply the images. [NEEDS INPUT: eval images]",
+          "acceptance": "Zero AUTO_OFFER on any case other than the clean minor-scratch ones."
+        }
+      ]
+    },
+    {
+      "id": "P4",
+      "name": "Buyer flow",
+      "tasks": [
+        {
+          "id": "P4.1",
+          "title": "Case creation and nonce screen",
+          "prompt": "Build the buyer page for creating a case from a captured order and showing the nonce with a countdown. Plain, mobile-first shadcn UI. Copy must follow the claims guardrails in RULES.md.",
+          "acceptance": "Screenshot on a 390px wide viewport shows nonce and timer."
+        },
+        {
+          "id": "P4.2",
+          "title": "Photo upload and offer screen",
+          "prompt": "Add photo upload (client resize to max 1600px), call the evidence endpoint, then show one of: capped keep-it offer with accept/decline, 'sent for merchant review', or 'return required'. Accept triggers the refund executor and then polls PayPal until the refund is confirmed.",
+          "acceptance": "End to end in the browser: offer accepted, real sandbox partial refund visible."
+        }
+      ]
+    },
+    {
+      "id": "P5",
+      "name": "Merchant side",
+      "tasks": [
+        {
+          "id": "P5.1",
+          "title": "Policy form",
+          "prompt": "Build the merchant policy page for the fields in MerchantPolicy with validation (cents, percent bounds, minConfidence 0..1). Show a live preview of the offer for a sample order using the real engine function.",
+          "acceptance": "Changing the cap changes the previewed offer and never exceeds the cap."
+        },
+        {
+          "id": "P5.2",
+          "title": "Review queue and ledger",
+          "prompt": "Build the manual review queue (approve, edit down within cap, reject) and a ledger table showing case, decision, offer, refund id, webhook verified badge and event id. Plain shadcn table.",
+          "acceptance": "Approving a queued case issues one refund and the ledger shows the verified webhook."
+        },
+        {
+          "id": "P5b",
+          "title": "OPTIONAL: full-return branch with Add Tracking",
+          "prompt": "Only if ahead of schedule. For FULL_RETURN_ONLY cases, accept a carrier and tracking number, call POST /v2/checkout/orders/{id}/track on the captured order, and hold the full refund until the merchant marks it received. Never attach tracking on the keep-it path. [VERIFY IN SANDBOX: tracking only works on captured orders]",
+          "acceptance": "Tracker created on a captured order; refund released only after merchant confirms."
+        }
+      ]
+    },
+    {
+      "id": "P6",
+      "name": "Judge workspace and hardening (Gate 3)",
+      "gate": "Nov 6 18:00 IST",
+      "tasks": [
+        {
+          "id": "P6.1",
+          "title": "Signed-cookie workspaces and reset",
+          "prompt": "Create per-visitor workspaces from a signed cookie using SESSION_SECRET, seeded with sample policy and orders from the pre-captured pool, auto-reset after 60 minutes, plus a Reset button. Add a per-workspace refund cap.",
+          "acceptance": "Two browsers see isolated data. Reset restores seed data."
+        },
+        {
+          "id": "P6.2",
+          "title": "Judge help bar and negative-test drawer",
+          "prompt": "Add a top bar showing the sandbox buyer email and password and a one-line how-to. Add a drawer that toggles PayPal-Mock-Response for the next refund so judges can see failures handled without corrupting the ledger.",
+          "acceptance": "Injected failure leaves the case in a retryable state with no phantom refund."
+        },
+        {
+          "id": "P6.3",
+          "title": "Cold-tester run",
+          "prompt": "Write TESTING.md describing a 90 second path for a stranger to complete the flow on the hosted URL. I will run it with someone who has never seen the app.",
+          "acceptance": "A cold tester finishes in under 90 seconds without help."
+        }
+      ]
+    },
+    {
+      "id": "P7",
+      "name": "Docs, video and submission (Gate 4)",
+      "gate": "Nov 11 20:00 IST",
+      "tasks": [
+        {
+          "id": "P7.1",
+          "title": "README and license",
+          "prompt": "Write README.md: one-line pitch, claims-guardrails wording, architecture diagram (Mermaid), PayPal endpoints used, AI tools and models used, run instructions, env table, honest limitations. Add the MIT LICENSE file. ASCII only. [NEEDS INPUT: license confirmation]",
+          "acceptance": "Fresh clone runs from the README alone."
+        },
+        {
+          "id": "P7.2",
+          "title": "Video script and checklist",
+          "prompt": "Turn PRD section 12 into a timed shooting script with exact on-screen actions. Add a submission checklist: public repo with license visible in About, hosted demo URL tested incognito on mobile and desktop, YouTube video under 3:00, Devpost text, AI tools listed.",
+          "acceptance": "Dry run of the script lands under 2:55."
+        }
+      ]
+    }
+  ]
+}

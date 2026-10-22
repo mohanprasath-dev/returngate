@@ -1,0 +1,32 @@
+# deps
+node_modules/
+.pnpm-store/
+
+# next
+.next/
+out/
+
+# env and secrets
+.env
+.env.*
+!.env.example
+
+# logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# tests and coverage
+coverage/
+
+# prisma
+prisma/*.db
+
+# os and editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# local eval outputs
+eval/out/
