@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyWebhookSignature } from '@/lib/paypal/webhooks';
+import { processWebhookEvent, verifyWebhookSignature } from '@/lib/paypal/webhooks';
 
 export const runtime = 'nodejs';
 
@@ -39,19 +39,38 @@ export async function POST(request: NextRequest) {
 			);
 		}
 
-		let eventData: { id?: string; event_type?: string } = {};
+		let eventData: { id?: string; event_type?: string; resource?: { id?: string } } = {};
+		let parsedPayload: unknown;
 		try {
-			eventData = JSON.parse(rawBody);
+			parsedPayload = JSON.parse(rawBody);
+			eventData = parsedPayload as { id?: string; event_type?: string; resource?: { id?: string } };
 		} catch {
 			return NextResponse.json({ error: 'Invalid JSON payload' }, { status: 400 });
 		}
 
+		if (!eventData.id || !eventData.event_type) {
+			return NextResponse.json({ error: 'Event missing id or event_type' }, { status: 400 });
+		}
+
 		// Log event id and type only. Never log full payload with PII or secrets.
 		console.log(
-			`[Webhook Verified SUCCESS] Event ID: ${eventData.id || 'unknown'} | Event Type: ${eventData.event_type || 'unknown'}`,
+			`[Webhook Verified SUCCESS] Event ID: ${eventData.id} | Event Type: ${eventData.event_type}`,
 		);
 
-		return NextResponse.json({ received: true });
+		const result = await processWebhookEvent(
+			{
+				id: eventData.id,
+				event_type: eventData.event_type,
+				resource: eventData.resource,
+			},
+			parsedPayload,
+		);
+
+		return NextResponse.json({
+			received: true,
+			duplicate: result.duplicate,
+			updatedRefund: result.updatedRefund,
+		});
 	} catch (err: unknown) {
 		const message = err instanceof Error ? err.message : String(err);
 		console.error('[Webhook Error]', message);

@@ -1,3 +1,6 @@
+import { Prisma } from '@prisma/client';
+import { prisma } from '@/lib/db';
+
 interface VerifyWebhookSignatureParams {
 	transmissionId: string;
 	transmissionTime: string;
@@ -90,3 +93,58 @@ export async function verifyWebhookSignature({
 	const data = (await res.json()) as VerificationApiResponse;
 	return data.verification_status === 'SUCCESS';
 }
+
+export interface WebhookProcessResult {
+	success: boolean;
+	duplicate: boolean;
+	updatedRefund: boolean;
+}
+
+export async function processWebhookEvent(
+	eventData: { id: string; event_type: string; resource?: { id?: string } },
+	rawPayload: unknown,
+	prismaClient = prisma,
+): Promise<WebhookProcessResult> {
+	try {
+		await prismaClient.webhookEvent.create({
+			data: {
+				eventId: eventData.id,
+				type: eventData.event_type,
+				signatureVerified: true,
+				payload: rawPayload as Prisma.InputJsonValue,
+			},
+		});
+	} catch (err: unknown) {
+		const isUniqueViolation =
+			typeof err === 'object' &&
+			err !== null &&
+			('code' in err ? (err as { code: string }).code === 'P2002' : false);
+
+		if (isUniqueViolation) {
+			console.log(`[Webhook Dedupe] Event ${eventData.id} already processed. Skipping.`);
+			return { success: true, duplicate: true, updatedRefund: false };
+		}
+		throw err;
+	}
+
+	let updatedRefund = false;
+	if (eventData.event_type === 'PAYMENT.CAPTURE.REFUNDED') {
+		const refundId = eventData.resource?.id;
+		if (refundId) {
+			const updateRes = await prismaClient.refund.updateMany({
+				where: { paypalRefundId: refundId },
+				data: {
+					status: 'CONFIRMED',
+					confirmedAt: new Date(),
+				},
+			});
+			updatedRefund = updateRes.count > 0;
+			console.log(
+				`[Webhook Refund Update] Updated ${updateRes.count} refund rows for refund ${refundId}`,
+			);
+		}
+	}
+
+	return { success: true, duplicate: false, updatedRefund };
+}
+
