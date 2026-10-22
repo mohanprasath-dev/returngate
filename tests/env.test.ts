@@ -23,8 +23,9 @@ describe('Environment validation', () => {
 			getEnv({
 				PAYPAL_CLIENT_SECRET: 'super-sensitive-secret-value-12345',
 			});
-		} catch (error: any) {
-			expect(error.message).not.toContain('super-sensitive-secret-value-12345');
+		} catch (error: unknown) {
+			const message = error instanceof Error ? error.message : String(error);
+			expect(message).not.toContain('super-sensitive-secret-value-12345');
 		}
 	});
 
