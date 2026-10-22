@@ -167,7 +167,6 @@ export async function analyzeItemPhoto({
 		const message = err instanceof Error ? err.message : String(err);
 		console.error('[Vision Model Error]', message);
 
-		// Fallback guarantees routing to MANUAL_REVIEW, never an offer on error
 		return {
 			output: {
 				...MANUAL_REVIEW_FALLBACK,
@@ -179,4 +178,30 @@ export async function analyzeItemPhoto({
 			reason: message,
 		};
 	}
+}
+
+/**
+ * Adapter for eval harness and buffer-based calls.
+ */
+export async function analyzeImageEvidence({
+	imageBuffer,
+	mimeType = 'image/jpeg',
+	clientIp = '127.0.0.1',
+	expectedNonce,
+	expectedSkuName,
+}: {
+	imageBuffer: Buffer;
+	mimeType?: string;
+	clientIp?: string;
+	expectedNonce?: string;
+	expectedSkuName?: string;
+}): Promise<VisionOutput> {
+	const res = await analyzeItemPhoto({
+		imageBase64: imageBuffer.toString('base64'),
+		mimeType,
+		ipAddress: clientIp,
+		expectedNonce,
+		expectedSkuName,
+	});
+	return res.output;
 }
