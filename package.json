@@ -8,7 +8,8 @@
 		"start": "next start",
 		"lint": "next lint",
 		"test": "vitest run --passWithNoTests",
-		"spike": "tsx --env-file=.env scripts/spike.ts"
+		"spike": "tsx --env-file=.env scripts/spike.ts",
+		"eval:vision": "tsx eval/eval-vision.ts"
 	},
 	"dependencies": {
 		"@base-ui/react": "^1.9.0",

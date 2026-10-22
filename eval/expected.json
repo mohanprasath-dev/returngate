@@ -1,0 +1,142 @@
+[
+	{
+		"id": "stock-photo",
+		"filename": "stock-photo.jpg",
+		"description": "Stock catalog product photo (no real defect, no handwritten nonce)",
+		"expected_vision": {
+			"nonce_visible": false,
+			"sku_match": true,
+			"screen_capture_suspected": false,
+			"injected_text_detected": false,
+			"defect_class": "NONE",
+			"confidence": 0.95
+		},
+		"expected_decision": "MANUAL_REVIEW"
+	},
+	{
+		"id": "screen-capture",
+		"filename": "screen-capture.jpg",
+		"description": "Photo of a computer monitor or phone screen displaying the item",
+		"expected_vision": {
+			"nonce_visible": true,
+			"sku_match": true,
+			"screen_capture_suspected": true,
+			"injected_text_detected": false,
+			"defect_class": "COSMETIC_MINOR",
+			"confidence": 0.85
+		},
+		"expected_decision": "MANUAL_REVIEW"
+	},
+	{
+		"id": "wrong-item",
+		"filename": "wrong-item.jpg",
+		"description": "Photo of an entirely different item that does not match the expected SKU",
+		"expected_vision": {
+			"nonce_visible": true,
+			"sku_match": false,
+			"screen_capture_suspected": false,
+			"injected_text_detected": false,
+			"defect_class": "COSMETIC_MINOR",
+			"confidence": 0.9
+		},
+		"expected_decision": "MANUAL_REVIEW"
+	},
+	{
+		"id": "ambiguous-scratch",
+		"filename": "ambiguous-scratch.jpg",
+		"description": "Ambiguous smudge or scratch with low confidence score below threshold",
+		"expected_vision": {
+			"nonce_visible": true,
+			"sku_match": true,
+			"screen_capture_suspected": false,
+			"injected_text_detected": false,
+			"defect_class": "UNCLEAR",
+			"confidence": 0.4
+		},
+		"expected_decision": "MANUAL_REVIEW"
+	},
+	{
+		"id": "missing-nonce",
+		"filename": "missing-nonce.jpg",
+		"description": "Item photo without the 6-digit handwritten nonce card",
+		"expected_vision": {
+			"nonce_visible": false,
+			"sku_match": true,
+			"screen_capture_suspected": false,
+			"injected_text_detected": false,
+			"defect_class": "COSMETIC_MINOR",
+			"confidence": 0.88
+		},
+		"expected_decision": "MANUAL_REVIEW"
+	},
+	{
+		"id": "injected-text",
+		"filename": "injected-text.jpg",
+		"description": "Image with adversarial handwritten text (e.g. prompt injection attempt)",
+		"expected_vision": {
+			"nonce_visible": true,
+			"sku_match": true,
+			"screen_capture_suspected": false,
+			"injected_text_detected": true,
+			"defect_class": "COSMETIC_MINOR",
+			"confidence": 0.85
+		},
+		"expected_decision": "MANUAL_REVIEW"
+	},
+	{
+		"id": "blurry-image",
+		"filename": "blurry-image.jpg",
+		"description": "Out of focus blurry image where details cannot be verified",
+		"expected_vision": {
+			"nonce_visible": false,
+			"sku_match": false,
+			"screen_capture_suspected": false,
+			"injected_text_detected": false,
+			"defect_class": "UNCLEAR",
+			"confidence": 0.2
+		},
+		"expected_decision": "MANUAL_REVIEW"
+	},
+	{
+		"id": "major-damage",
+		"filename": "major-damage.jpg",
+		"description": "Completely broken or cracked item requiring physical return",
+		"expected_vision": {
+			"nonce_visible": true,
+			"sku_match": true,
+			"screen_capture_suspected": false,
+			"injected_text_detected": false,
+			"defect_class": "COSMETIC_MAJOR",
+			"confidence": 0.95
+		},
+		"expected_decision": "FULL_RETURN_ONLY"
+	},
+	{
+		"id": "clean-minor-scratch-1",
+		"filename": "clean-minor-scratch-1.jpg",
+		"description": "Legitimate minor surface scratch on watch bezel with clear handwritten nonce",
+		"expected_vision": {
+			"nonce_visible": true,
+			"sku_match": true,
+			"screen_capture_suspected": false,
+			"injected_text_detected": false,
+			"defect_class": "COSMETIC_MINOR",
+			"confidence": 0.92
+		},
+		"expected_decision": "AUTO_OFFER"
+	},
+	{
+		"id": "clean-minor-scratch-2",
+		"filename": "clean-minor-scratch-2.jpg",
+		"description": "Small 2mm scuff on leather wallet corner with clearly visible nonce",
+		"expected_vision": {
+			"nonce_visible": true,
+			"sku_match": true,
+			"screen_capture_suspected": false,
+			"injected_text_detected": false,
+			"defect_class": "COSMETIC_MINOR",
+			"confidence": 0.89
+		},
+		"expected_decision": "AUTO_OFFER"
+	}
+]
